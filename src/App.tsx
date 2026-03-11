@@ -1,4 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
+import * as tf from '@tensorflow/tfjs';
+import '@tensorflow/tfjs-backend-webgl';
+import '@tensorflow/tfjs-backend-cpu';
+import * as cocoSsd from '@tensorflow-models/coco-ssd';
 import { 
   Camera, 
   Shield, 
@@ -50,26 +54,86 @@ interface Alert {
 
 const LiveStream = ({ camera, onClose }: { camera: Camera; onClose: () => void }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isModelLoading, setIsModelLoading] = useState(true);
+  const [detections, setDetections] = useState<cocoSsd.DetectedObject[]>([]);
 
   useEffect(() => {
     let stream: MediaStream | null = null;
+    let model: cocoSsd.ObjectDetection | null = null;
+    let requestAnimFrameId: number;
 
-    const startStream = async () => {
+    const startStreamAndAI = async () => {
       try {
         stream = await navigator.mediaDevices.getUserMedia({ video: true });
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
         }
+
+        // Load the AI model
+        model = await cocoSsd.load();
+        setIsModelLoading(false);
+
+        // Start detection loop
+        detectFrame();
       } catch (err) {
-        console.error("Error accessing webcam:", err);
-        setError("Could not access camera. Please ensure permissions are granted.");
+        console.error("Error accessing webcam or loading AI:", err);
+        setError("Could not access camera or load AI model.");
+        setIsModelLoading(false);
       }
     };
 
-    startStream();
+    const detectFrame = async () => {
+      if (videoRef.current && canvasRef.current && model && videoRef.current.readyState === 4) {
+        const video = videoRef.current;
+        const canvas = canvasRef.current;
+        const ctx = canvas.getContext('2d');
+
+        // Ensure canvas dimensions match video intrinsic dimensions
+        if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+        }
+
+        // Detect objects
+        const predictions = await model.detect(video);
+        setDetections(predictions);
+
+        if (ctx) {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          
+          predictions.forEach(prediction => {
+            // Filter to only show relevant objects (e.g. person, car)
+            if (['person', 'car', 'truck', 'bicycle', 'bus', 'motorcycle', 'dog', 'cat', 'bear', 'bird'].includes(prediction.class)) {
+              const [x, y, width, height] = prediction.bbox;
+              
+              // Draw bounding box
+              ctx.strokeStyle = '#10b981'; // emerald-500
+              ctx.lineWidth = 4;
+              ctx.strokeRect(x, y, width, height);
+
+              // Draw label background
+              ctx.fillStyle = '#10b981';
+              const textWidth = ctx.measureText(prediction.class).width;
+              ctx.fillRect(x, y, textWidth + 80, 24);
+
+              // Draw text
+              ctx.fillStyle = '#000000';
+              ctx.font = 'bold 16px sans-serif';
+              ctx.fillText(`${prediction.class.toUpperCase()} (${Math.round(prediction.score * 100)}%)`, x + 5, y + 17);
+            }
+          });
+        }
+      }
+      
+      requestAnimFrameId = requestAnimationFrame(detectFrame);
+    };
+
+    startStreamAndAI();
 
     return () => {
+      if (requestAnimFrameId) cancelAnimationFrame(requestAnimFrameId);
       if (stream) {
         stream.getTracks().forEach(track => track.stop());
       }
@@ -97,9 +161,9 @@ const LiveStream = ({ camera, onClose }: { camera: Camera; onClose: () => void }
           </button>
         </div>
         
-        <div className="aspect-video bg-zinc-950 flex items-center justify-center">
+        <div className="aspect-video bg-zinc-950 flex items-center justify-center relative overflow-hidden">
           {error ? (
-            <div className="text-center p-6">
+            <div className="text-center p-6 z-20">
               <AlertTriangle className="mx-auto text-amber-500 mb-4" size={48} />
               <p className="text-zinc-400">{error}</p>
               <p className="text-xs text-zinc-600 mt-2">Simulating placeholder feed...</p>
@@ -108,12 +172,25 @@ const LiveStream = ({ camera, onClose }: { camera: Camera; onClose: () => void }
               </div>
             </div>
           ) : (
-            <video 
-              ref={videoRef} 
-              autoPlay 
-              playsInline 
-              className="w-full h-full object-cover"
-            />
+            <>
+              <video 
+                ref={videoRef} 
+                autoPlay 
+                playsInline 
+                muted
+                className="w-full h-full object-cover absolute inset-0"
+              />
+              <canvas 
+                ref={canvasRef}
+                className="w-full h-full absolute inset-0 pointer-events-none object-cover z-10"
+              />
+              {isModelLoading && (
+                <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center z-20 backdrop-blur-sm">
+                  <div className="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mb-4" />
+                  <p className="text-emerald-500 font-bold uppercase tracking-widest text-sm">Loading AI Cortex...</p>
+                </div>
+              )}
+            </>
           )}
         </div>
 
@@ -121,6 +198,11 @@ const LiveStream = ({ camera, onClose }: { camera: Camera; onClose: () => void }
           <div className="flex items-center gap-4">
             <span className="flex items-center gap-1"><MapPin size={14} /> {camera.location}</span>
             <span className="flex items-center gap-1"><Activity size={14} /> 1080p • 30fps</span>
+            {detections.length > 0 && (
+              <span className="flex items-center gap-1 text-emerald-500 font-bold animate-pulse">
+                <Shield size={14} /> OBJECT DETECTED ({detections.length})
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <div className="px-2 py-1 rounded bg-zinc-700 text-zinc-300">REC</div>
