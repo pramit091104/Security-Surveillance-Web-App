@@ -1,0 +1,7 @@
+{
+  "name": "Home Security Surveillance App",
+  "description": "A comprehensive home security dashboard for remote camera monitoring, featuring live streaming, camera management, and real-time alerts.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
