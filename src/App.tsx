@@ -3,21 +3,23 @@ import * as tf from '@tensorflow/tfjs';
 import '@tensorflow/tfjs-backend-webgl';
 import '@tensorflow/tfjs-backend-cpu';
 import * as cocoSsd from '@tensorflow-models/coco-ssd';
-import { 
-  Camera, 
-  Shield, 
-  Plus, 
-  Trash2, 
-  Bell, 
-  LogOut, 
-  User, 
-  Activity, 
-  MapPin, 
+import {
+  Camera,
+  Shield,
+  Plus,
+  Trash2,
+  Bell,
+  LogOut,
+  User,
+  Activity,
+  MapPin,
   Video,
   X,
   AlertTriangle,
   CheckCircle2,
-  Menu
+  Menu,
+  Edit,
+  History
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { clsx, type ClassValue } from 'clsx';
@@ -33,6 +35,7 @@ interface User {
   id: number;
   name: string;
   email: string;
+  role: 'Admin' | 'FamilyMember' | 'SecurityGuard';
 }
 
 interface Camera {
@@ -102,12 +105,12 @@ const LiveStream = ({ camera, onClose }: { camera: Camera; onClose: () => void }
 
         if (ctx) {
           ctx.clearRect(0, 0, canvas.width, canvas.height);
-          
+
           predictions.forEach(prediction => {
             // Filter to only show relevant objects (e.g. person, car)
             if (['person', 'car', 'truck', 'bicycle', 'bus', 'motorcycle', 'dog', 'cat', 'bear', 'bird'].includes(prediction.class)) {
               const [x, y, width, height] = prediction.bbox;
-              
+
               // Draw bounding box
               ctx.strokeStyle = '#10b981'; // emerald-500
               ctx.lineWidth = 4;
@@ -126,7 +129,7 @@ const LiveStream = ({ camera, onClose }: { camera: Camera; onClose: () => void }
           });
         }
       }
-      
+
       requestAnimFrameId = requestAnimationFrame(detectFrame);
     };
 
@@ -141,7 +144,7 @@ const LiveStream = ({ camera, onClose }: { camera: Camera; onClose: () => void }
   }, []);
 
   return (
-    <motion.div 
+    <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
@@ -153,14 +156,14 @@ const LiveStream = ({ camera, onClose }: { camera: Camera; onClose: () => void }
             <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
             <h3 className="font-medium text-white">{camera.name} — Live Feed</h3>
           </div>
-          <button 
+          <button
             onClick={onClose}
             className="p-2 hover:bg-white/10 rounded-full transition-colors text-zinc-400 hover:text-white"
           >
             <X size={20} />
           </button>
         </div>
-        
+
         <div className="aspect-video bg-zinc-950 flex items-center justify-center relative overflow-hidden">
           {error ? (
             <div className="text-center p-6 z-20">
@@ -168,19 +171,19 @@ const LiveStream = ({ camera, onClose }: { camera: Camera; onClose: () => void }
               <p className="text-zinc-400">{error}</p>
               <p className="text-xs text-zinc-600 mt-2">Simulating placeholder feed...</p>
               <div className="mt-6 w-full h-full absolute inset-0 opacity-20 pointer-events-none">
-                 <div className="w-full h-full bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-zinc-800 to-transparent animate-pulse" />
+                <div className="w-full h-full bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-zinc-800 to-transparent animate-pulse" />
               </div>
             </div>
           ) : (
             <>
-              <video 
-                ref={videoRef} 
-                autoPlay 
-                playsInline 
+              <video
+                ref={videoRef}
+                autoPlay
+                playsInline
                 muted
                 className="w-full h-full object-cover absolute inset-0"
               />
-              <canvas 
+              <canvas
                 ref={canvasRef}
                 className="w-full h-full absolute inset-0 pointer-events-none object-cover z-10"
               />
@@ -224,9 +227,12 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [activeCamera, setActiveCamera] = useState<Camera | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [activeEditCamera, setActiveEditCamera] = useState<Camera | null>(null);
+  const [isAlertHistoryOpen, setIsAlertHistoryOpen] = useState(false);
 
   // Form states
-  const [authForm, setAuthForm] = useState({ name: '', email: '', password: '' });
+  const [authForm, setAuthForm] = useState({ name: '', email: '', password: '', role: 'FamilyMember' });
   const [cameraForm, setCameraForm] = useState({ name: '', location: 'Front Door' });
 
   useEffect(() => {
@@ -245,7 +251,7 @@ export default function App() {
         fetch('/cameras', { headers: { 'Authorization': `Bearer ${token}` } }),
         fetch('/alerts', { headers: { 'Authorization': `Bearer ${token}` } })
       ]);
-      
+
       if (camRes.ok) setCameras(await camRes.json());
       if (alertRes.ok) setAlerts(await alertRes.json());
     } catch (err) {
@@ -258,7 +264,7 @@ export default function App() {
     setLoading(true);
     setError(null);
     const endpoint = view === 'login' ? '/auth/login' : '/auth/register';
-    
+
     try {
       const res = await fetch(endpoint, {
         method: 'POST',
@@ -266,7 +272,7 @@ export default function App() {
         body: JSON.stringify(authForm)
       });
       const data = await res.json();
-      
+
       if (res.ok) {
         if (view === 'login') {
           setToken(data.token);
@@ -293,7 +299,7 @@ export default function App() {
     try {
       const res = await fetch('/cameras', {
         method: 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
@@ -322,6 +328,32 @@ export default function App() {
     }
   };
 
+  const handleEditCamera = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activeEditCamera) return;
+    try {
+      const res = await fetch(`/cameras/${activeEditCamera.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          name: activeEditCamera.name,
+          location: activeEditCamera.location,
+          status: activeEditCamera.status
+        })
+      });
+      if (res.ok) {
+        setIsEditModalOpen(false);
+        setActiveEditCamera(null);
+        fetchData();
+      }
+    } catch (err) {
+      console.error("Edit camera error:", err);
+    }
+  };
+
   const logout = () => {
     setToken(null);
     setUser(null);
@@ -333,7 +365,7 @@ export default function App() {
   if (view !== 'dashboard') {
     return (
       <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4 selection:bg-emerald-500/30">
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           className="w-full max-w-md"
@@ -363,41 +395,58 @@ export default function App() {
 
             <form onSubmit={handleAuth} className="space-gap-4 flex flex-col gap-4">
               {view === 'register' && (
-                <div>
-                  <label className="block text-xs font-medium text-zinc-500 uppercase tracking-wider mb-2">Full Name</label>
-                  <input 
-                    type="text" 
-                    required
-                    className="w-full bg-zinc-800 border border-white/5 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50 transition-all"
-                    placeholder="John Doe"
-                    value={authForm.name}
-                    onChange={e => setAuthForm({...authForm, name: e.target.value})}
-                  />
-                </div>
+                <>
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-500 uppercase tracking-wider mb-2">Full Name</label>
+                    <input
+                      type="text"
+                      required
+                      className="w-full bg-zinc-800 border border-white/5 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50 transition-all"
+                      placeholder="John Doe"
+                      value={authForm.name}
+                      onChange={e => setAuthForm({ ...authForm, name: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-500 uppercase tracking-wider mb-2">Account Role</label>
+                    <select
+                      className="w-full bg-zinc-800 border border-white/5 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50 transition-all"
+                      value={authForm.role}
+                      onChange={e => setAuthForm({ ...authForm, role: e.target.value })}
+                    >
+                      <option value="FamilyMember">Family Member</option>
+                      <option value="SecurityGuard">Security Guard</option>
+                      <option value="Admin">Admin</option>
+                    </select>
+                  </div>
+                </>
               )}
               <div>
                 <label className="block text-xs font-medium text-zinc-500 uppercase tracking-wider mb-2">Email Address</label>
-                <input 
-                  type="email" 
+                <input
+                  id="username"
+                  type="email"
                   required
                   className="w-full bg-zinc-800 border border-white/5 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50 transition-all"
                   placeholder="name@example.com"
                   value={authForm.email}
-                  onChange={e => setAuthForm({...authForm, email: e.target.value})}
+                  onChange={e => setAuthForm({ ...authForm, email: e.target.value })}
                 />
               </div>
               <div>
                 <label className="block text-xs font-medium text-zinc-500 uppercase tracking-wider mb-2">Password</label>
-                <input 
-                  type="password" 
+                <input
+                  id="password"
+                  type="password"
                   required
                   className="w-full bg-zinc-800 border border-white/5 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50 transition-all"
                   placeholder="••••••••"
                   value={authForm.password}
-                  onChange={e => setAuthForm({...authForm, password: e.target.value})}
+                  onChange={e => setAuthForm({ ...authForm, password: e.target.value })}
                 />
               </div>
-              <button 
+              <button
+                id="loginBtn"
                 disabled={loading}
                 className="w-full bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-bold py-3 rounded-xl transition-all shadow-lg shadow-emerald-500/20 disabled:opacity-50 mt-4"
               >
@@ -406,7 +455,7 @@ export default function App() {
             </form>
 
             <div className="mt-8 text-center">
-              <button 
+              <button
                 onClick={() => {
                   setView(view === 'login' ? 'register' : 'login');
                   setError(null);
@@ -438,9 +487,10 @@ export default function App() {
             <div className="flex items-center gap-4">
               <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full bg-zinc-900 border border-white/5">
                 <User size={14} className="text-zinc-500" />
-                <span className="text-xs font-medium text-zinc-400">{user?.name}</span>
+                <span className="text-xs font-medium text-zinc-400">{user?.name} <span className="text-[10px] text-zinc-600 uppercase">({user?.role})</span></span>
               </div>
-              <button 
+              <button
+                id="logoutBtn"
                 onClick={logout}
                 className="p-2 hover:bg-red-500/10 rounded-full transition-colors text-zinc-500 hover:text-red-400"
                 title="Logout"
@@ -457,7 +507,7 @@ export default function App() {
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          
+
           {/* Left Column: Cameras */}
           <div className="lg:col-span-2 space-y-6">
             <div className="flex items-center justify-between">
@@ -465,30 +515,35 @@ export default function App() {
                 <h2 className="text-2xl font-bold text-white tracking-tight">Active Cameras</h2>
                 <p className="text-sm text-zinc-500 mt-1">{cameras.length} devices connected and monitoring</p>
               </div>
-              <button 
-                onClick={() => setIsAddModalOpen(true)}
-                className="flex items-center gap-2 bg-zinc-900 hover:bg-zinc-800 border border-white/5 px-4 py-2 rounded-xl text-sm font-medium text-white transition-all"
-              >
-                <Plus size={18} /> Add Camera
-              </button>
+              {user?.role === 'Admin' && (
+                <button
+                  id="addCameraBtn"
+                  onClick={() => setIsAddModalOpen(true)}
+                  className="flex items-center gap-2 bg-zinc-900 hover:bg-zinc-800 border border-white/5 px-4 py-2 rounded-xl text-sm font-medium text-white transition-all"
+                >
+                  <Plus size={18} /> Add Camera
+                </button>
+              )}
             </div>
 
             {cameras.length === 0 ? (
               <div className="bg-zinc-900/50 border-2 border-dashed border-white/5 rounded-3xl p-12 text-center">
                 <Camera className="mx-auto text-zinc-700 mb-4" size={48} />
                 <h3 className="text-lg font-medium text-zinc-400">No cameras found</h3>
-                <p className="text-sm text-zinc-600 mt-2">Add your first security camera to start monitoring your home.</p>
-                <button 
-                  onClick={() => setIsAddModalOpen(true)}
-                  className="mt-6 text-emerald-500 hover:text-emerald-400 font-medium text-sm"
-                >
-                  Configure new device →
-                </button>
+                <p className="text-sm text-zinc-600 mt-2">No active cameras are available right now.</p>
+                {user?.role === 'Admin' && (
+                  <button
+                    onClick={() => setIsAddModalOpen(true)}
+                    className="mt-6 text-emerald-500 hover:text-emerald-400 font-medium text-sm"
+                  >
+                    Configure new device →
+                  </button>
+                )}
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {cameras.map(camera => (
-                  <motion.div 
+                  <motion.div
                     layout
                     key={camera.id}
                     className="group bg-zinc-900 border border-white/5 rounded-2xl overflow-hidden hover:border-emerald-500/30 transition-all shadow-xl"
@@ -509,7 +564,8 @@ export default function App() {
                         </div>
                       </div>
                       <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-30 bg-black/40 backdrop-blur-sm">
-                        <button 
+                        <button
+                          id="viewCameraBtn"
                           onClick={() => setActiveCamera(camera)}
                           className="bg-white text-zinc-950 px-4 py-2 rounded-full font-bold text-xs flex items-center gap-2 transform translate-y-2 group-hover:translate-y-0 transition-transform"
                         >
@@ -530,12 +586,28 @@ export default function App() {
                           <p className="text-xs text-white font-mono">2.4GB</p>
                         </div>
                       </div>
-                      <button 
-                        onClick={() => handleDeleteCamera(camera.id)}
-                        className="p-2 text-zinc-600 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all"
-                      >
-                        <Trash2 size={16} />
-                      </button>
+                      {user?.role === 'Admin' && (
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => {
+                              setActiveEditCamera(camera);
+                              setIsEditModalOpen(true);
+                            }}
+                            className="p-2 text-zinc-600 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-lg transition-all"
+                            title="Edit Camera"
+                          >
+                            <Edit size={16} />
+                          </button>
+                          <button
+                            id="deleteCameraBtn"
+                            onClick={() => handleDeleteCamera(camera.id)}
+                            className="p-2 text-zinc-600 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all"
+                            title="Remove Camera"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </motion.div>
                 ))}
@@ -555,7 +627,7 @@ export default function App() {
                 </div>
                 <span className="text-[10px] font-bold bg-zinc-800 px-2 py-1 rounded text-zinc-400 uppercase">Live</span>
               </div>
-              
+
               <div className="divide-y divide-white/5 max-h-[600px] overflow-y-auto">
                 {alerts.length === 0 ? (
                   <div className="p-12 text-center">
@@ -580,13 +652,19 @@ export default function App() {
                   ))
                 )}
               </div>
-              
-              <div className="p-4 bg-zinc-950/50 text-center">
-                <button 
+
+              <div className="p-4 bg-zinc-950/50 text-center flex flex-col gap-3 border-t border-white/5">
+                <button
                   onClick={fetchData}
-                  className="text-xs font-bold text-zinc-500 hover:text-white transition-colors uppercase tracking-widest"
+                  className="text-xs font-bold text-zinc-500 hover:text-white transition-colors uppercase tracking-widest inline-flex items-center justify-center gap-2"
                 >
-                  Refresh History
+                  <Activity size={12} /> Refresh Live Feed
+                </button>
+                <button
+                  onClick={() => setIsAlertHistoryOpen(true)}
+                  className="text-xs font-bold text-emerald-500 hover:text-emerald-400 transition-colors uppercase tracking-widest inline-flex items-center justify-center gap-2"
+                >
+                  <History size={12} /> View Full History
                 </button>
               </div>
             </div>
@@ -619,13 +697,13 @@ export default function App() {
       {/* Add Camera Modal */}
       <AnimatePresence>
         {isAddModalOpen && (
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
           >
-            <motion.div 
+            <motion.div
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
@@ -640,21 +718,23 @@ export default function App() {
               <form onSubmit={handleAddCamera} className="space-y-4">
                 <div>
                   <label className="block text-xs font-medium text-zinc-500 uppercase tracking-wider mb-2">Camera Name</label>
-                  <input 
-                    type="text" 
+                  <input
+                    id="cameraName"
+                    type="text"
                     required
                     className="w-full bg-zinc-800 border border-white/5 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
                     placeholder="e.g. Front Porch Cam"
                     value={cameraForm.name}
-                    onChange={e => setCameraForm({...cameraForm, name: e.target.value})}
+                    onChange={e => setCameraForm({ ...cameraForm, name: e.target.value })}
                   />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-zinc-500 uppercase tracking-wider mb-2">Location</label>
-                  <select 
+                  <select
+                    id="cameraLocation"
                     className="w-full bg-zinc-800 border border-white/5 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
                     value={cameraForm.location}
-                    onChange={e => setCameraForm({...cameraForm, location: e.target.value})}
+                    onChange={e => setCameraForm({ ...cameraForm, location: e.target.value })}
                   >
                     <option>Front Door</option>
                     <option>Garage</option>
@@ -664,7 +744,7 @@ export default function App() {
                     <option>Driveway</option>
                   </select>
                 </div>
-                <button className="w-full bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-bold py-3 rounded-xl transition-all shadow-lg shadow-emerald-500/20 mt-4">
+                <button id="saveCamera" className="w-full bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-bold py-3 rounded-xl transition-all shadow-lg shadow-emerald-500/20 mt-4">
                   Register Device
                 </button>
               </form>
@@ -673,12 +753,141 @@ export default function App() {
         )}
       </AnimatePresence>
 
+      {/* Edit Camera Modal */}
+      <AnimatePresence>
+        {isEditModalOpen && activeEditCamera && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-zinc-900 border border-white/10 rounded-3xl p-8 w-full max-w-md shadow-2xl"
+            >
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-xl font-bold text-white flex items-center gap-2"><Edit className="text-emerald-500" size={20} /> Edit Camera</h2>
+                <button onClick={() => { setIsEditModalOpen(false); setActiveEditCamera(null); }} className="text-zinc-500 hover:text-white">
+                  <X size={20} />
+                </button>
+              </div>
+              <form onSubmit={handleEditCamera} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-medium text-zinc-500 uppercase tracking-wider mb-2">Camera Name</label>
+                  <input
+                    type="text"
+                    required
+                    className="w-full bg-zinc-800 border border-white/5 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                    value={activeEditCamera.name}
+                    onChange={e => setActiveEditCamera({ ...activeEditCamera, name: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-zinc-500 uppercase tracking-wider mb-2">Location</label>
+                  <select
+                    className="w-full bg-zinc-800 border border-white/5 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                    value={activeEditCamera.location}
+                    onChange={e => setActiveEditCamera({ ...activeEditCamera, location: e.target.value })}
+                  >
+                    <option>Front Door</option>
+                    <option>Garage</option>
+                    <option>Living Room</option>
+                    <option>Backyard</option>
+                    <option>Kitchen</option>
+                    <option>Driveway</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-zinc-500 uppercase tracking-wider mb-2">Device Status</label>
+                  <select
+                    className="w-full bg-zinc-800 border border-white/5 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                    value={activeEditCamera.status}
+                    onChange={e => setActiveEditCamera({ ...activeEditCamera, status: e.target.value as 'Online' | 'Offline' })}
+                  >
+                    <option value="Online">Online Active</option>
+                    <option value="Offline">Offline Suspended</option>
+                  </select>
+                </div>
+                <button className="w-full bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-bold py-3 rounded-xl transition-all shadow-lg shadow-emerald-500/20 mt-4">
+                  Save Configuration
+                </button>
+              </form>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Alert History Modal */}
+      <AnimatePresence>
+        {isAlertHistoryOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4"
+          >
+            <motion.div
+              initial={{ y: 20, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 20, opacity: 0 }}
+              className="bg-zinc-900 border border-white/10 rounded-3xl overflow-hidden w-full max-w-2xl shadow-2xl flex flex-col max-h-[80vh]"
+            >
+              <div className="p-6 border-b border-white/5 flex items-center justify-between bg-zinc-800/30">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-emerald-500/10">
+                    <History className="text-emerald-500" size={20} />
+                  </div>
+                  <h2 className="text-xl font-bold text-white">Full Alert History</h2>
+                </div>
+                <button onClick={() => setIsAlertHistoryOpen(false)} className="text-zinc-500 hover:text-white p-2 hover:bg-white/5 rounded-full transition-colors">
+                  <X size={20} />
+                </button>
+              </div>
+              <div className="p-6 overflow-y-auto flex-1 divide-y divide-white/5">
+                {alerts.length === 0 ? (
+                  <div className="p-12 text-center">
+                    <CheckCircle2 className="mx-auto text-zinc-700 mb-3" size={48} />
+                    <p className="text-zinc-500">No security events recorded in the system.</p>
+                  </div>
+                ) : (
+                  alerts.map(alert => (
+                    <div key={alert.id} className="py-4 first:pt-0 last:pb-0 hover:bg-white/5 transition-colors group px-4 -mx-4 rounded-xl">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex items-start gap-4">
+                          <div className="mt-1 w-2.5 h-2.5 rounded-full bg-amber-500 shrink-0 shadow-[0_0_10px_rgba(245,158,11,0.5)]" />
+                          <div>
+                            <p className="text-sm text-zinc-200 leading-relaxed font-medium">
+                              {alert.message}
+                            </p>
+                            <p className="text-[11px] text-zinc-500 mt-1.5 uppercase font-mono tracking-wider flex items-center gap-2">
+                              <Camera size={10} className="inline" /> {alert.cameraName}
+                            </p>
+                          </div>
+                        </div>
+                        <span className="text-xs text-zinc-600 font-mono shrink-0">
+                          {new Date(alert.timestamp).toLocaleString(undefined, {
+                            month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit'
+                          })}
+                        </span>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Live Stream View */}
       <AnimatePresence>
         {activeCamera && (
-          <LiveStream 
-            camera={activeCamera} 
-            onClose={() => setActiveCamera(null)} 
+          <LiveStream
+            camera={activeCamera}
+            onClose={() => setActiveCamera(null)}
           />
         )}
       </AnimatePresence>
