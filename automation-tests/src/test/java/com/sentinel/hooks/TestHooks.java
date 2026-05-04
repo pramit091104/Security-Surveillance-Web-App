@@ -38,6 +38,7 @@ public class TestHooks {
         options.addArguments("--use-fake-ui-for-media-stream");
         options.addArguments("--use-fake-device-for-media-stream");
         options.addArguments("--disable-notifications");
+        options.addArguments("--headless=new");
 
         WebDriver webDriver = new ChromeDriver(options);
         webDriver.manage().timeouts().implicitlyWait(Duration.ofSeconds(10));
@@ -47,7 +48,7 @@ public class TestHooks {
         wait.set(new WebDriverWait(webDriver, Duration.ofSeconds(10)));
 
         // Navigate to login page before each scenario
-        webDriver.get("http://localhost:3000/login");
+        webDriver.get("http://localhost:3005/login");
     }
 
     @After

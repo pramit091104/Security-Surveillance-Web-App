@@ -33,7 +33,7 @@ pipeline {
                 
                 # This loop checks if the server is responding on its port (default 5173 or 3000)
                 # Adjust the port number below to match your app's dev port.
-                timeout 60s bash -c 'until curl -s localhost:5173 > /dev/null; do sleep 2; echo "Still waiting..."; done' || true
+                timeout 60s bash -c 'until curl -s localhost:3005 > /dev/null; do sleep 2; echo "Still waiting..."; done' || true
                 
                 # 3. Run tests
                 cd automation-tests
