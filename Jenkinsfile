@@ -3,7 +3,7 @@ pipeline {
 
     tools {
         // Make sure these match the names you set in Jenkins Global Tool Configuration
-        nodejs 'NodeJS' 
+        nodejs 'NodeJs' 
         maven 'Maven'
         jdk 'Java11'
     }
