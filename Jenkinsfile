@@ -17,16 +17,16 @@ pipeline {
 
         stage('Install Node Dependencies') {
             steps {
-                bat 'npm install'
+                sh 'npm install'
             }
         }
 
         stage('Start Server & Run BDD Tests') {
             steps {
                 // Start the Node app in the background, wait a few seconds, then run Maven tests
-                bat '''
-                start /b npm run dev
-                timeout /t 10 /nobreak
+                sh '''
+                nohup npm run dev > server.log 2>&1 &
+                sleep 10
                 cd automation-tests
                 mvn clean test
                 '''
@@ -37,7 +37,7 @@ pipeline {
     post {
         always {
             // Kill the Node.js server after tests finish so it doesn't hang the Jenkins port
-            bat 'taskkill /F /IM node.exe /T || exit 0'
+            sh 'pkill -f "node" || true'
 
             // Publish the TestNG HTML Automation Report
             publishHTML(target: [
