@@ -39,7 +39,7 @@ db.exec(`
 `);
 
 const app = express();
-const PORT = 3000;
+const PORT = 3005;
 const JWT_SECRET = process.env.JWT_SECRET || "super-secret-key-123";
 
 app.use(cors());
@@ -176,6 +176,40 @@ app.get("/users", authenticateToken, (req: any, res) => {
   if (req.user.role !== 'Admin') return res.status(403).json({ error: "Admin access required" });
   const users = db.prepare("SELECT id, name, email, role FROM users").all();
   res.json(users);
+});
+
+// Clear all users (Admin only)
+app.delete("/users/clear", authenticateToken, (req: any, res) => {
+  if (req.user.role !== 'Admin') return res.status(403).json({ error: "Admin access required" });
+  
+  try {
+    const userCount = db.prepare("SELECT COUNT(*) as count FROM users").get();
+    const result = db.prepare("DELETE FROM users").run();
+    
+    // Reset auto-increment counter
+    db.prepare("DELETE FROM sqlite_sequence WHERE name='users'").run();
+    
+    res.json({ 
+      message: "All users cleared successfully", 
+      deletedCount: result.changes,
+      previousCount: userCount.count 
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Delete specific user
+app.delete("/users/:id", authenticateToken, (req: any, res) => {
+  if (req.user.role !== 'Admin') return res.status(403).json({ error: "Admin access required" });
+  
+  const { id } = req.params;
+  const user = db.prepare("SELECT * FROM users WHERE id = ?").get(id);
+  
+  if (!user) return res.status(404).json({ error: "User not found" });
+  
+  db.prepare("DELETE FROM users WHERE id = ?").run(id);
+  res.json({ message: "User deleted successfully", deletedUser: user });
 });
 
 // --- VITE MIDDLEWARE ---
