@@ -39,6 +39,8 @@ public class TestHooks {
         options.addArguments("--use-fake-device-for-media-stream");
         options.addArguments("--disable-notifications");
         options.addArguments("--headless=new");
+        options.addArguments("--no-sandbox");
+        options.addArguments("--disable-dev-shm-usage");
 
         WebDriver webDriver = new ChromeDriver(options);
         webDriver.manage().timeouts().implicitlyWait(Duration.ofSeconds(10));
