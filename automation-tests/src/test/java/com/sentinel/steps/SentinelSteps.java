@@ -59,7 +59,8 @@ public class SentinelSteps {
                 .pollingEvery(Duration.ofMillis(500))
                 .ignoring(NoSuchElementException.class);
 
-        fluentWait.until(d -> d.findElement(By.id("addCameraBtn"))).click();
+        WebElement addBtn = fluentWait.until(d -> d.findElement(By.id("addCameraBtn")));
+        ((JavascriptExecutor) getDriver()).executeScript("arguments[0].click();", addBtn);
 
         WebElement camNameInput = getWait().until(ExpectedConditions.visibilityOfElementLocated(By.id("cameraName")));
         camNameInput.sendKeys(cameraName);
@@ -75,7 +76,8 @@ public class SentinelSteps {
         By deleteBtnLocator = By.xpath(
             "//h3[text()='" + cameraName + "']/ancestor::div[contains(@class,'group')]//button[@id='deleteCameraBtn']"
         );
-        getWait().until(ExpectedConditions.elementToBeClickable(deleteBtnLocator)).click();
+        WebElement deleteBtn = getWait().until(ExpectedConditions.elementToBeClickable(deleteBtnLocator));
+        ((JavascriptExecutor) getDriver()).executeScript("arguments[0].click();", deleteBtn);
 
         // Handle native alert if present — same as original deleteCameraAndHandleAlerts()
         try {
@@ -160,7 +162,8 @@ public class SentinelSteps {
         By viewBtnLocator = By.xpath(
             "//h3[text()='" + cameraName + "']/ancestor::div[contains(@class,'group')]//button[@id='viewCameraBtn']"
         );
-        getWait().until(ExpectedConditions.elementToBeClickable(viewBtnLocator)).click();
+        WebElement viewBtn = getWait().until(ExpectedConditions.elementToBeClickable(viewBtnLocator));
+        ((JavascriptExecutor) getDriver()).executeScript("arguments[0].click();", viewBtn);
 
         // Wait for modal header
         By modalHeader = By.xpath(

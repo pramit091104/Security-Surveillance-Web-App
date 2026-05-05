@@ -1,0 +1,4 @@
+com\sentinel\legacy\SentinelDataDrivenTest.class
+com\sentinel\runners\TestRunner.class
+com\sentinel\steps\SentinelSteps.class
+com\sentinel\hooks\TestHooks.class
