@@ -21,10 +21,18 @@
    ```bash
    npm run dev
    ```
-   The server will start on port 3000.
+   The server will start on port 3005.
 
-5. **Access the App**
-   Open the App URL provided in the AI Studio preview.
+5. **Run Automation Tests**
+   Ensure the application server is running (`npm run dev`) first, then open a **new terminal window** and run:
+   ```bash
+   cd automation-tests
+   mvn clean test
+   ```
+   *This will run the BDD (Cucumber + Selenium) test suite. You can view the generated test report at `automation-tests/target/surefire-reports/SentinelBDDSuite/SentinelTests.html`.*
+
+6. **Access the App**
+   Open the App URL provided in the AI Studio preview or go to `http://localhost:3005`.
 
 ## Features
 - **User Authentication**: Secure login and registration with JWT.
